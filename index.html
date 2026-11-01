@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>東京美食公約數 - 4人盲選與最佳餐廳推薦系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Shippori+Mincho:wght@600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #0f1115; color: #e2e8f0; }
+        .font-jp { font-family: 'Shippori Mincho', serif; }
+        .glass-card { background: rgba(22, 27, 34, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    </style>
+</head>
+<body class="min-h-screen pb-16">
+    <div x-data="tokyoApp()" x-init="initApp()" class="max-w-4xl mx-auto px-4 py-6">
+        
+        <header class="text-center my-6 relative">
+            <div class="inline-block bg-rose-950/60 text-rose-400 border border-rose-800/50 text-xs px-3 py-1 rounded-full mb-2 font-mono">
+                <i class="fa-solid font-jp">東京美食公約數 Matchmaker v2.6</i>
+            </div>
+            <h1 class="text-3xl md:text-4xl font-extrabold text-white tracking-tight font-jp">
+                <span class="text-rose-500">TOKYO</span> 4人美食盲選系統
+            </h1>
+            <p class="text-slate-400 text-xs md:text-sm mt-2">手機各自填寫 ‧ 無縫雲端同步 ‧ 匿名公約數演算法</p>
+
+            <div class="flex justify-center mt-6 gap-2 bg-slate-900/80 p-1.5 rounded-xl border border-slate-800 max-w-xs mx-auto">
+                <button @click="currentView = 'survey'" 
+                        :class="currentView === 'survey' ? 'bg-rose-600 text-white font-bold shadow-lg' : 'text-slate-400 hover:text-white'"
+                        class="flex-1 py-2 rounded-lg text-sm transition-all duration-200">
+                    <i class="fa-solid fa-pen-to-square mr-1"></i> 偏好填寫
+                </button>
+                <button x-show="isHost" @click="currentView = 'host'; fetchRemoteSubmissions()" 
+                        :class="currentView === 'host' ? 'bg-amber-600 text-white font-bold shadow-lg' : 'text-slate-400 hover:text-white'"
+                        class="flex-1 py-2 rounded-lg text-sm transition-all duration-200">
+                    <i class="fa-solid fa-crown mr-1"></i> Howard 主控台
+                </button>
+            </div>
+        </header>
+
+        <!-- VIEW 1: MEMBER SURVEY -->
+        <main x-show="currentView === 'survey'" class="space-y-6">
+            <section class="glass-card rounded-2xl p-5 shadow-xl">
+                <label class="block text-slate-300 text-sm font-bold mb-2">請輸入你的名字：</label>
+                <input type="text" x-model="memberName" @input="checkHostKey()" placeholder="例如：小明、Howard" 
+                       class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-rose-500 transition-all">
+                <p x-show="isHost" class="text-xs text-amber-400 mt-2"><i class="fa-solid fa-shield-halved mr-1"></i> 已偵測到 Howard 主持人身分，主控台功能已開啟！</p>
+            </section>
+
+            <section class="glass-card rounded-2xl p-5 border-l-4 border-rose-500 shadow-xl">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="bg-rose-600 text-white text-xs font-bold px-2 py-0.5 rounded">Tier 0</span>
+                    <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i> 選擇本次聚餐區域</h2>
+                </div>
+                <div class="grid grid-cols-5 gap-2">
+                    <template x-for="dist in districts" :key="dist">
+                        <button @click="selectedDistrict = dist" 
+                                :class="selectedDistrict === dist ? 'bg-rose-600 text-white border-rose-400 font-bold shadow-md scale-105' : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'"
+                                class="py-2.5 px-1 text-center rounded-xl border transition-all text-sm">
+                            <span x-text="dist"></span>
+                        </button>
+                    </template>
+                </div>
+            </section>
+
+            <section class="glass-card rounded-2xl p-5 shadow-xl">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="bg-rose-600 text-white text-xs font-bold px-2 py-0.5 rounded">Tier 1</span>
+                    <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-utensils text-rose-500 mr-1"></i> 想吃什麼大類？ (可多選)</h2>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <template x-for="cat in mainCategories" :key="cat.id">
+                        <button @click="toggleMainCategory(cat.id)"
+                                :class="formData.mainCats.includes(cat.id) ? 'bg-rose-950/80 border-rose-500 text-rose-200 font-bold' : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-700'"
+                                class="p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all">
+                            <i :class="cat.icon" class="text-xl mb-1 text-rose-400"></i>
+                            <span class="text-sm" x-text="cat.name"></span>
+                        </button>
+                    </template>
+                </div>
+            </section>
+
+            <section x-show="formData.mainCats.length > 0" class="glass-card rounded-2xl p-5 shadow-xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="bg-rose-600 text-white text-xs font-bold px-2 py-0.5 rounded">Tier 2</span>
+                        <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-bowl-food text-rose-500 mr-1"></i> 細項美食偏好</h2>
+                    </div>
+                    <span class="text-xs text-amber-400 font-medium"><i class="fa-solid fa-star mr-0.5"></i> 可標記 1 個「最想吃」</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <template x-for="sub in availableSubCuisines" :key="sub">
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-800/50 border border-slate-700/80">
+                            <button @click="toggleSubCuisine(sub)"
+                                    :class="formData.subCats.includes(sub) ? 'text-rose-400 font-bold' : 'text-slate-300'"
+                                    class="text-left text-sm flex-1 flex items-center gap-2">
+                                <i :class="formData.subCats.includes(sub) ? 'fa-solid fa-square-check text-rose-500' : 'fa-regular fa-square text-slate-500'"></i>
+                                <span x-text="sub"></span>
+                            </button>
+                            <button @click="setMustEat(sub)"
+                                    x-show="formData.subCats.includes(sub)"
+                                    :class="formData.mustEat === sub ? 'bg-amber-500 text-slate-950 font-bold border-amber-300' : 'bg-slate-700 text-slate-400 border-slate-600'"
+                                    class="text-xs px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1">
+                                <i class="fa-solid fa-star text-xs"></i>
+                                <span x-text="formData.mustEat === sub ? '必吃首選' : '設為首選'"></span>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </section>
+
+            <section class="glass-card rounded-2xl p-5 shadow-xl">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="bg-rose-600 text-white text-xs font-bold px-2 py-0.5 rounded">Tier 3</span>
+                    <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-triangle-exclamation text-rose-500 mr-1"></i> 忌口與避雷項目</h2>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    <template x-for="pen in penaltyOptions" :key="pen.id">
+                        <button @click="togglePenalty(pen.id)"
+                                :class="formData.penalties.includes(pen.id) ? 'bg-rose-950/90 border-rose-500 text-rose-300 font-bold' : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-700'"
+                                class="p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1">
+                            <span class="text-sm" x-text="pen.label"></span>
+                            <span class="text-[10px] text-rose-400 font-mono">-35% 扣分</span>
+                        </button>
+                    </template>
+                </div>
+            </section>
+
+            <div class="pt-4">
+                <button @click="submitToGoogleSheet()" 
+                        :disabled="isSubmitting"
+                        class="w-full bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold py-4 rounded-2xl shadow-xl border border-rose-400/30 text-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                    <i class="fa-solid" :class="isSubmitting ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
+                    <span x-text="isSubmitting ? '雲端同步上傳中...' : '確定提交偏好'"></span>
+                </button>
+            </div>
+        </main>
+
+        <!-- VIEW 2: HOST DASHBOARD -->
+        <main x-show="currentView === 'host' && isHost" class="space-y-6">
+            <section class="glass-card rounded-2xl p-5 border-l-4 border-amber-500 shadow-xl">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="bg-amber-500 text-slate-950 text-xs font-extrabold px-2 py-0.5 rounded">Howard Dashboard</span>
+                            <h2 class="text-xl font-extrabold text-white">東京美食交集控制中心</h2>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">目前目標區域：<span class="text-rose-400 font-bold text-sm" x-text="selectedDistrict"></span></p>
+                    </div>
+                    <button @click="fetchRemoteSubmissions()" class="bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 text-xs px-3 py-2 rounded-xl transition flex items-center gap-1">
+                        <i class="fa-solid fa-arrows-rotate" :class="isLoading ? 'fa-spin' : ''"></i> 立即更新試算表資料
+                    </button>
+                </div>
+
+                <div class="mt-5">
+                    <div class="text-xs text-slate-400 mb-2">已提交成員一覽：</div>
+                    <div class="flex flex-wrap gap-2">
+                        <template x-for="(sub, mId) in storedSubmissions" :key="mId">
+                            <span class="bg-slate-800 border border-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                                <i class="fa-solid fa-circle-check text-emerald-400"></i>
+                                <span x-text="sub.name || mId" class="font-bold"></span>
+                            </span>
+                        </template>
+                        <template x-if="Object.keys(storedSubmissions).length === 0">
+                            <span class="text-xs text-slate-500 italic">目前試算表尚無提交紀錄</span>
+                        </template>
+                    </div>
+                </div>
+            </section>
+
+            <section class="space-y-4">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-trophy text-amber-400"></i>
+                    <span><span x-text="selectedDistrict"></span> 區 - 最佳公約數推薦排行榜</span>
+                </h3>
+
+                <div class="space-y-3">
+                    <template x-for="(res, idx) in calculatedRankings" :key="res.name">
+                        <div class="glass-card rounded-2xl p-5 border transition-all hover:border-rose-500/50 shadow-lg relative overflow-hidden">
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="flex items-center gap-3">
+                                    <div :class="idx === 0 ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'"
+                                         class="w-8 h-8 rounded-xl flex items-center justify-center text-sm shadow">
+                                        <span x-text="idx + 1"></span>
+                                    </div>
+                                    <div>
+                                        <h4 class="text-lg font-bold text-white font-jp" x-text="res.name"></h4>
+                                        <div class="flex flex-wrap items-center gap-2 mt-1">
+                                            <span class="bg-slate-800 text-slate-300 text-xs px-2 py-0.5 rounded border border-slate-700" x-text="res.type"></span>
+                                            <span class="text-xs text-slate-400"><i class="fa-solid fa-location-dot mr-1"></i><span x-text="res.district"></span></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-2xl font-black text-rose-400 font-mono" x-text="res.score + '%'"></div>
+                                    <div class="text-[10px] text-slate-400 uppercase tracking-wider">契合度</div>
+                                </div>
+                            </div>
+                            <div class="mt-4 pt-3 border-t border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                <div class="text-xs space-y-1">
+                                    <template x-if="res.warnings.length > 0">
+                                        <div class="text-amber-400 flex items-center gap-1 font-medium">
+                                            <i class="fa-solid fa-triangle-exclamation"></i>
+                                            <span x-text="res.warnings.join('；')"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                                <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(res.name + ' ' + res.district)" 
+                                   target="_blank" 
+                                   class="inline-flex items-center justify-center gap-2 bg-slate-800 hover:bg-rose-600 text-slate-200 hover:text-white text-xs font-bold px-4 py-2 rounded-xl border border-slate-700 hover:border-rose-500 transition-all shadow">
+                                    <i class="fa-solid fa-map-location-dot text-rose-400"></i>
+                                    <span>在 Google Maps 開啟</span>
+                                </a>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </section>
+        </main>
+
+        <footer class="mt-12 text-center text-xs text-slate-600">
+            <button @click="unlockHost()" class="hover:text-slate-400 transition-colors">Host Login</button>
+        </footer>
+    </div>
+
+    <script>
+        // ⚠️ 請確認這裡已經填入你的 Google Apps Script 網址：
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzOyj1PFOpscG8bqgSDgNVS-ntieEh-q2AB8oE42KxwJfMK0s6bkU12LhUi9dO6cTc1/exec";
+
+        function tokyoApp() {
+            return {
+                currentView: 'survey',
+                selectedDistrict: '澀谷',
+                districts: ['澀谷', '新宿', '銀座', '港區', '淺草'],
+                memberName: '',
+                isHost: false,
+                isSubmitting: false,
+                isLoading: false,
+                
+                mainCategories: [
+                    { id: 'meat', name: '肉類 / 燒烤', icon: 'fa-solid fa-drumstick-bite' },
+                    { id: 'noodle', name: '拉麵 / 麵食', icon: 'fa-solid fa-bowl-rice' },
+                    { id: 'pot', name: '鍋物 / 壽喜燒', icon: 'fa-solid fa-fire-burner' },
+                    { id: 'sea', name: '壽司 / 海鮮', icon: 'fa-solid fa-fish' },
+                    { id: 'light', name: '輕食 / 定食 / 咖哩', icon: 'fa-solid fa-utensils' }
+                ],
+                subCategoryMap: {
+                    meat: ['牛舌', '燒肉', '串燒', '炸豬排'],
+                    noodle: ['拉麵 / 沾麵'],
+                    pot: ['壽喜燒', '涮涮鍋'],
+                    sea: ['壽司', '鰻魚'],
+                    light: ['咖哩', '居酒屋 (酒館)']
+                },
+                penaltyOptions: [
+                    { id: 'no_beef', label: '不吃牛肉 🐮' },
+                    { id: 'no_raw', label: '不吃生食 🍣' },
+                    { id: 'no_spicy', label: '不吃辣 🌶️' },
+                    { id: 'no_organ', label: '不吃內臟 🫀' },
+                    { id: 'no_seafood', label: '不吃海鮮 🦐' }
+                ],
+                formData: { mainCats: [], subCats: [], mustEat: null, penalties: [] },
+                storedSubmissions: {},
+                rawRestaurants: [
+                    { name: '牛舌之檸檬 澀谷店', district: '澀谷', type: '牛舌', isBeef: true },
+                    { name: '京燒肉 京之介', district: '澀谷', type: '牛舌', isBeef: true },
+                    { name: '炭火燒 Lily 澀谷店', district: '澀谷', type: '壽司', isRaw: true, isSeafood: true },
+                    { name: '新宿燒肉 牛舌之檸檬 總本店', district: '新宿', type: '牛舌', isBeef: true },
+                    { name: '燒肉亭 六歌仙 西口本店', district: '新宿', type: '燒肉', isBeef: true },
+                    { name: '人形町今半 新宿第一生命大樓店', district: '新宿', type: '壽喜燒', isBeef: true },
+                    { name: '鮨 銀座 小野寺', district: '銀座', type: '壽司', isRaw: true, isSeafood: true },
+                    { name: '炸豬排 檍 銀座店', district: '銀座', type: '炸豬排' },
+                    { name: '銀座 篝 本店', district: '銀座', type: '拉麵 / 沾麵' },
+                    { name: '新橋 鰻魚四代目 菊川', district: '港區', type: '鰻魚', isSeafood: true },
+                    { name: '淺草今半 國際通本店', district: '淺草', type: '壽喜燒', isBeef: true }
+                ],
+
+                initApp() {
+                    this.fetchRemoteSubmissions();
+                },
+
+                checkHostKey() {
+                    if (this.memberName.trim().toLowerCase() === 'howard') {
+                        this.isHost = true;
+                    }
+                },
+
+                unlockHost() {
+                    const pwd = prompt("請輸入主持人解鎖金鑰：");
+                    if (pwd && pwd.toLowerCase() === 'howard') {
+                        this.isHost = true;
+                        this.currentView = 'host';
+                        this.fetchRemoteSubmissions();
+                    }
+                },
+
+                get availableSubCuisines() {
+                    let subs = [];
+                    this.formData.mainCats.forEach(cat => { if (this.subCategoryMap[cat]) subs = subs.concat(this.subCategoryMap[cat]); });
+                    return [...new Set(subs)];
+                },
+
+                toggleMainCategory(catId) {
+                    const idx = this.formData.mainCats.indexOf(catId);
+                    if (idx > -1) this.formData.mainCats.splice(idx, 1);
+                    else this.formData.mainCats.push(catId);
+                },
+
+                toggleSubCuisine(sub) {
+                    const idx = this.formData.subCats.indexOf(sub);
+                    if (idx > -1) {
+                        this.formData.subCats.splice(idx, 1);
+                        if (this.formData.mustEat === sub) this.formData.mustEat = null;
+                    } else this.formData.subCats.push(sub);
+                },
+
+                setMustEat(sub) { this.formData.mustEat = (this.formData.mustEat === sub) ? null : sub; },
+
+                togglePenalty(penId) {
+                    const idx = this.formData.penalties.indexOf(penId);
+                    if (idx > -1) this.formData.penalties.splice(idx, 1);
+                    else this.formData.penalties.push(penId);
+                },
+
+                async submitToGoogleSheet() {
+                    if (!this.memberName.trim()) {
+                        alert("請先輸入你的名字！");
+                        return;
+                    }
+                    if (this.formData.subCats.length === 0) {
+                        alert("請至少選擇一個細項美食！");
+                        return;
+                    }
+                    this.isSubmitting = true;
+                    try {
+                        const mId = 'user_' + this.memberName.trim().toLowerCase();
+                        await fetch(GOOGLE_SCRIPT_URL, {
+                            method: "POST",
+                            mode: "no-cors",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                memberId: mId,
+                                name: this.memberName.trim(),
+                                payload: this.formData
+                            })
+                        });
+                        alert("✅ 偏好已成功匿名同步！請通知 Howard 揭曉結果。");
+                    } catch (e) {
+                        alert("提交失敗，請檢查網路。");
+                    } finally {
+                        this.isSubmitting = false;
+                    }
+                },
+
+                async fetchRemoteSubmissions() {
+                    this.isLoading = true;
+                    try {
+                        const res = await fetch(GOOGLE_SCRIPT_URL);
+                        const data = await res.json();
+                        this.storedSubmissions = data;
+                    } catch (e) {} finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                get calculatedRankings() {
+                    const filteredRest = this.rawRestaurants.filter(r => r.district === this.selectedDistrict);
+                    const subKeys = Object.keys(this.storedSubmissions);
+                    if (subKeys.length === 0) return [];
+
+                    return filteredRest.map(rest => {
+                        let totalScore = 50;
+                        let warnings = [];
+                        subKeys.forEach(mId => {
+                            const sub = this.storedSubmissions[mId].d;
+                            if (sub && sub.subCats && sub.subCats.includes(rest.type)) totalScore += 15;
+                            if (sub && sub.mustEat === rest.type) totalScore += 25;
+                            if (sub && sub.penalties) {
+                                if (sub.penalties.includes('no_beef') && rest.isBeef) { totalScore -= 35; warnings.push('含牛肉'); }
+                                if (sub.penalties.includes('no_raw') && rest.isRaw) { totalScore -= 35; warnings.push('含生食'); }
+                                if (sub.penalties.includes('no_seafood') && rest.isSeafood) { totalScore -= 35; warnings.push('含海鮮'); }
+                            }
+                        });
+                        return { ...rest, score: Math.min(100, Math.max(10, totalScore)), warnings: [...new Set(warnings)] };
+                    }).sort((a, b) => b.score - a.score);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
